@@ -1,0 +1,56 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+venv/
+.venv/
+env/
+.env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/*
+
+# IDE / Editor
+.idea/
+.vscode/
+*.iml
+
+# Obsidian
+.obsidian/
+
+# Claude
+.claude/
+
+# Graphify
+graphify/
+graphify-out/
+graphify-output/
+
+# Logs / temp
+*.log
+*.tmp
+*.bak
+*.pdf
+
+# Docs (auto-generated or private)
+*.md
+!README.md
+
+# OS
+.DS_Store
+Thumbs.db

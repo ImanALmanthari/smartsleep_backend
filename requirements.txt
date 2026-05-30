@@ -1,0 +1,17 @@
+fastapi
+supabase==2.9.0
+uvicorn[standard]
+pydantic-settings
+python-dotenv
+python-jose[cryptography]
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+email-validator
+scikit-learn
+boto3
+pandas
+numpy
+python-multipart
+pytest
+httpx
+requests

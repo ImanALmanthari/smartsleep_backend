@@ -18,8 +18,6 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Body
 from typing import List, Optional
 import uuid
-import base64  # Used to encode the CSV as Base64 for the email attachment
-import re      # Used to sanitize the attachment filename (remove unsafe characters)
 from datetime import datetime, date as date_type
 
 logger = logging.getLogger(__name__)
@@ -478,57 +476,13 @@ def export_sleep_data(
     else:
         period = "All time"                               # No date filter applied
 
-    # ── Step 5: Base64-encode the CSV and build the email attachment ─────────
-    #
-    # Why Base64?
-    # Email protocols (SMTP) can only carry plain ASCII text. A CSV file is
-    # also text, but to attach it as a FILE (not inline text) we encode it
-    # using Base64 — a scheme that represents any bytes as printable ASCII.
-    # The GAS script then decodes it back with Utilities.base64Decode() and
-    # wraps it in a Blob object that MailApp.sendEmail() can attach to the email.
-    #
-    # Step-by-step:
-    #   csv_content            → Python string  (e.g. "Date,Score\n2024-01-01,78")
-    #   .encode("utf-8")       → Python bytes   (raw bytes representation)
-    #   base64.b64encode(...)  → Base64 bytes   (e.g. b"RGF0ZSxTY29y...")
-    #   .decode("ascii")       → ASCII string   (safe to include in JSON payload)
-    csv_b64 = base64.b64encode(csv_content.encode("utf-8")).decode("ascii")
-
-    # Build a safe, human-readable filename for the attachment.
-    # re.sub() replaces any character that is NOT a letter, digit, dash, or
-    # underscore with an underscore. This prevents filesystem-unsafe names.
-    # Examples:
-    #   "All time"                  → "smartsleep_All_time.csv"
-    #   "2024-01-01 → 2024-12-31"  → "smartsleep_2024-01-01_to_2024-12-31.csv"
-    safe_period = re.sub(r"[^\w\-]", "_", period.replace("→", "to"))
-    filename = f"smartsleep_{safe_period}.csv"
-
-    # The attachment dict format the GAS relay script expects.
-    # "fileName" is what appears in the email client (e.g. "smartsleep_All_time.csv").
-    # "mimeType" tells the email client how to open the file — "text/csv" means
-    #   the OS will offer to open it in Excel, Numbers, or Google Sheets.
-    # "data" is the Base64-encoded file content as a plain string.
-    attachment = {
-        "fileName": filename,
-        "mimeType": "text/csv",
-        "data":     csv_b64,
-    }
-
-    # ── Step 6: Render the HTML email body and send with attachment ────────
-    # Import here (not at the top) to avoid a circular import risk at module load time
+    # ── Step 5: Render the HTML email body with the CSV embedded inline ───
     from app.services.email_service import send_email, render_template
     from datetime import datetime as dt_cls
 
-    # getattr(obj, "attr", default) safely reads an attribute — returns default if missing
     display_name = getattr(current_user, "full_name", None) or current_user.email.split("@")[0]
+    export_date = dt_cls.utcnow().strftime("%B %d, %Y")
 
-    # strftime() formats a datetime as a string:
-    # %B = full month name, %d = zero-padded day, %Y = 4-digit year
-    export_date = dt_cls.utcnow().strftime("%B %d, %Y")  # e.g. "April 23, 2024"
-
-    # render_template() loads data_export.html and substitutes {{KEY}} placeholders.
-    # NOTE: we no longer pass CSV_DATA — the CSV is now sent as a file attachment,
-    # not embedded as raw text in the email body.
     html = render_template(
         "data_export.html",
         NAME=display_name,
@@ -539,16 +493,13 @@ def export_sleep_data(
         AVG_SCORE=avg_score,
         BEST_SCORE=best_score,
         WORST_SCORE=worst_score,
-        FILENAME=filename,            # {{FILENAME}} — shown in the "attached file" box
+        CSV_DATA=csv_content,
     )
 
-    # send_email() now accepts an `attachments` list. Passing [attachment] causes
-    # the GAS relay to include the CSV as a file attachment in the outgoing email.
     success = send_email(
         current_user.email,
         f"SmartSleep Data Export — {len(records)} nights ({period})",
         html,
-        attachments=[attachment],     # ← this is the new parameter
     )
 
     if not success:
